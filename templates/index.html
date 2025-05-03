@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+    <h2>Works</h2>
+    <ul>
+        {% for work in works %}
+            <li>{{ work.job_title }} - {{ work.team_leader_id }} - {{ work.work_size }} hours</li>
+        {% endfor %}
+    </ul>
+{% endblock %}
