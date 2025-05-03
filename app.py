@@ -1,4 +1,6 @@
-from flask import Flask, render_template, redirect, url_for, request
+import hashlib
+import os
+from flask import Flask, render_template, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, login_required, current_user, logout_user
 from data.db_session import create_session
@@ -6,7 +8,6 @@ from data.models import User, Work
 from data.login_form import LoginForm
 from data.register_form import RegisterForm
 from data.add_work_form import AddWorkForm
-from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -20,12 +21,25 @@ login_manager.init_app(app)
 def load_user(user_id):
     return db.session.get(User, user_id)
 
+# Функция для хеширования паролей
+def hash_password(password):
+    salt = os.urandom(16)  # Генерация случайной соли
+    password_salt = password.encode('utf-8') + salt
+    password_hash = hashlib.sha256(password_salt).hexdigest()  # Хеширование пароля с солью
+    return password_hash, salt
+
+# Функция для проверки пароля
+def check_password(stored_hash, stored_salt, password):
+    password_salt = password.encode('utf-8') + stored_salt
+    password_hash = hashlib.sha256(password_salt).hexdigest()
+    return password_hash == stored_hash  # Сравнение хеша пароля с сохранённым хешем
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
-        if user and check_password_hash(user.password, form.password.data):
+        if user and check_password(user.password, user.salt, form.password.data):  # Проверка пароля
             login_user(user, remember=form.remember_me.data)
             return redirect(url_for('index'))
         return render_template('login.html', form=form, message="Неправильный логин или пароль")
@@ -35,8 +49,8 @@ def login():
 def register():
     form = RegisterForm()
     if form.validate_on_submit():
-        hashed_password = generate_password_hash(form.password.data)
-        user = User(email=form.email.data, password=hashed_password, name=form.name.data)
+        password_hash, salt = hash_password(form.password.data)  # Хешируем пароль
+        user = User(email=form.email.data, password=password_hash, salt=salt, name=form.name.data)
         db.session.add(user)
         db.session.commit()
         login_user(user)
